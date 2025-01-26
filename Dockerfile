@@ -1,4 +1,4 @@
-FROM ubuntu:noble-20240605 AS add-apt-repositories
+FROM ubuntu:noble-20241118.1 AS add-apt-repositories
 
 # hadolint ignore=DL3008,DL3015
 RUN apt-get update \
@@ -8,15 +8,15 @@ RUN apt-get update \
     && apt-key adv --fetch-keys https://download.webmin.com/developers-key.asc \
     && echo "deb https://download.webmin.com/download/newkey/repository stable contrib" >> /etc/apt/sources.list
 
-FROM ubuntu:noble-20240605
+FROM ubuntu:noble-20241118.1
 
 LABEL maintainer="rickyelopez"
 
 COPY --from=add-apt-repositories /etc/apt/trusted.gpg /etc/apt/trusted.gpg
 COPY --from=add-apt-repositories /etc/apt/sources.list /etc/apt/sources.list
 
-ARG BIND_VERSION=1:9.18.24-0ubuntu5
-ARG WEBMIN_VERSION=2.111
+ARG BIND_VERSION=1:9.18.30-0ubuntu0.24.04.1
+ARG WEBMIN_VERSION=2.202
 
 SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
 
@@ -29,6 +29,7 @@ RUN  apt-get update \
     dnsutils \
     tzdata \
     cron \
+    isc-dhcp-server \
     && rm -rf /var/lib/apt/lists/*
 
 # hadolint ignore=DL3015
@@ -45,7 +46,7 @@ COPY entrypoint.sh /sbin/entrypoint.sh
 
 RUN chmod 755 /sbin/entrypoint.sh
 
-EXPOSE 53/udp 53/tcp 10000/tcp
+EXPOSE 53/udp 53/tcp 10000/tcp 67/udp 68/udp
 
 ENTRYPOINT ["/sbin/entrypoint.sh"]
 
