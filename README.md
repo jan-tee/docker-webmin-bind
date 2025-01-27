@@ -136,6 +136,8 @@ Docker Compose
             - WEBMIN_INIT_REFERERS=dns.domain.com
             - WEBMIN_INIT_REDIRECT_PORT=10000
             - ROOT_PASSWORD=password
+            - ENABLE_DHCP=true
+            - DHCP_INTERFACES=eth0
             - TZ=Europe/London
 ```
 
