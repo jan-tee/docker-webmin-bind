@@ -28,6 +28,8 @@ file_env 'ROOT_PASSWORD'
 
 BIND_USER=${BIND_USER:-bind}
 BIND_GROUP=${BIND_GROUP:-bind}
+DHCP_USER=${DHCP_USER:-dhcpd}
+DHCP_GROUP=${DHCP_GROUP:-dhcpd}
 ROOT_PASSWORD=${ROOT_PASSWORD:-password}
 BIND_EXTRA_FLAGS=${BIND_EXTRA_FLAGS:--g}
 WEBMIN_ENABLED=${WEBMIN_ENABLED:-true}
@@ -38,6 +40,7 @@ WEBMIN_INIT_REDIRECT_SSL=${WEBMIN_INIT_REDIRECT_SSL:-false}
 
 DATA_DIR=${DATA_DIR:-/data}
 BIND_DATA_DIR=${DATA_DIR}/bind
+DHCP_DATA_DIR=${DATA_DIR}/dhcp
 WEBMIN_DATA_DIR=${DATA_DIR}/webmin
 
 create_bind_data_dir() {
@@ -182,9 +185,61 @@ first_init() {
     fi
 }
 
+
+create_dhcpd_data_dir() {
+  if [ "${ENABLE_DHCP}" == "true" ]; then
+    # /var/lib/dhcp
+    mkdir -p "${DHCP_DATA_DIR}"
+    mkdir -p "${DHCP_DATA_DIR}/var"
+    chown -R "${DHCP_USER}":"${DHCP_GROUP}" "${DHCP_DATA_DIR}"
+    rm -rf /var/lib/dhcp
+    ln -sf "${DHCP_DATA_DIR}/var" /var/lib/dhcp
+
+    if [ ! -e "${DHCP_DATA_DIR}/var/dhcpd.leases" ] ; then
+      touch "${DHCP_DATA_DIR}/var/dhcpd.leases"
+      chown "${DHCP_USER}":"${DHCP_GROUP}" "${DHCP_DATA_DIR}/var/dhcpd.leases"
+    fi
+
+    # /etc/dhcp
+    if [ ! -d "${DHCP_DATA_DIR}/etc" ]; then
+      mv /etc/dhcp "${DHCP_DATA_DIR}/etc"
+    fi
+
+    rm -rf /etc/dhcp
+    ln -sf "${DHCP_DATA_DIR}/etc" /etc/dhcp
+    chmod -R 0775 "${DHCP_DATA_DIR}"
+    chown -R "${DHCP_USER}":"${DHCP_GROUP}" "${DHCP_DATA_DIR}"
+  fi
+}
+
+create_bind_supervisord_conf() {
+  cat <<EOF > /etc/supervisor/conf.d/named.conf
+[program:named]
+command="$(type -p named)" -u ${BIND_USER} ${BIND_EXTRA_FLAGS} -c /etc/bind/named.conf ${EXTRA_ARGS}
+stdout_logfile=/dev/fd/1
+stdout_logfile_maxbytes=0
+redirect_stderr=true
+autorestart=false
+EOF
+}
+
+create_dhcpd_supervisord_conf() {
+  if [ "${ENABLE_DHCP}" == "true" ]; then
+    cat <<EOF > /etc/supervisor/conf.d/dhcpd.conf
+[program:dhcpd]
+command="$(type -p dhcpd)" -user ${DHCP_USER} -group ${DHCP_GROUP} -f -4 -pf /run/dhcp-server/dhcpd.pid -cf /etc/dhcp/dhcpd.conf ${DHCP_INTERFACES-eth0}
+stdout_logfile=/dev/fd/1
+stdout_logfile_maxbytes=0
+redirect_stderr=true
+autorestart=true
+EOF
+  fi
+}
+
 create_pid_dir
 create_bind_data_dir
 create_bind_cache_dir
+create_dhcpd_data_dir
 
 # allow arguments to be passed to named
 if [[ ${1:0:1} = '-' ]]; then
@@ -194,6 +249,9 @@ elif [[ ${1} == named || ${1} == $(type -p named) ]]; then
   EXTRA_ARGS="${*:2}"
   set --
 fi
+
+create_dhcpd_supervisord_conf
+create_bind_supervisord_conf
 
 # default behaviour is to launch named
 if [[ -z ${1} ]]; then
@@ -209,10 +267,11 @@ if [[ -z ${1} ]]; then
 
   echo
   echo '---------------------'
-  echo '|  Starting named   |'
+  echo '|  Starting supervisord   |'
   echo '---------------------'
   echo
-  exec "$(type -p named)" -u ${BIND_USER} ${BIND_EXTRA_FLAGS} -c /etc/bind/named.conf ${EXTRA_ARGS}
+  # exec "$(type -p named)" -u ${BIND_USER} ${BIND_EXTRA_FLAGS} -c /etc/bind/named.conf ${EXTRA_ARGS}
+  exec "$(type -p supervisord)" -c /etc/supervisor/supervisord.conf
 else
   exec "$@"
 fi

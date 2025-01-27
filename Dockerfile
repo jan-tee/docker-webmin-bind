@@ -30,6 +30,7 @@ RUN  apt-get update \
     tzdata \
     cron \
     isc-dhcp-server \
+    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
 # hadolint ignore=DL3015
@@ -45,6 +46,10 @@ RUN rm -rf /etc/apt/apt.conf.d/docker-gzip-indexes \
 COPY entrypoint.sh /sbin/entrypoint.sh
 
 RUN chmod 755 /sbin/entrypoint.sh
+
+RUN mkdir -p /var/log/supervisor
+
+COPY supervisord.conf /etc/supervisor/supervisord.conf
 
 EXPOSE 53/udp 53/tcp 10000/tcp 67/udp 68/udp
 
